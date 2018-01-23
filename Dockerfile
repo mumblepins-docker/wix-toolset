@@ -1,11 +1,13 @@
 FROM buildpack-deps:xenial-scm
 
-
+ENV MAVEN_VERSION=3.5.2 \
+    ANT_VERSION=1.10.1 \
+    GRADLE_VERSION=4.4.1
 
 RUN set -ex; \
     dpkg --add-architecture i386 ;\
     apt-get update ;\
-    apt-get install apt-transport-https ;\
+    apt-get install -y --no-install-recommends apt-transport-https ;\
     wget -nc https://dl.winehq.org/wine-builds/Release.key ;\
     apt-key add Release.key ;\
     echo "deb https://dl.winehq.org/wine-builds/ubuntu/ xenial main" >> /etc/apt/sources.list ;\
@@ -22,16 +24,17 @@ RUN set -ex; \
         wget \
         file \
         git \
-        mercurial xvfb locales sudo openssh-client ca-certificates tar gzip parallel net-tools netcat unzip zip bzip2 gnupg curl wget
-RUN set -ex; \
+        mercurial xvfb locales sudo openssh-client ca-certificates tar gzip parallel net-tools netcat unzip zip bzip2 gnupg curl wget \
+        snapcraft ;\
     echo debconf shared/accepted-oracle-license-v1-1 select true | debconf-set-selections ;\
     echo debconf shared/accepted-oracle-license-v1-1 seen true | debconf-set-selections ;\
-    apt-get install -y oracle-java9-installer
-
-RUN set -ex; \
-    apt-get install -y --install-recommends winehq-stable ;\
+    apt-get install -y --no-install-recommends oracle-java9-installer ;\
+    apt-get install -y --no-install-recommends winehq-stable ;\
     ln -sf /usr/share/zoneinfo/Etc/UTC /etc/localtime ;\
-    locale-gen C.UTF-8 || true
+    apt-get dist-upgrade -y ;\
+    apt-get autoremove -y ;\
+    apt-get clean -y ;\
+    rm -rf /var/lib/apt/lists/*
 
 
 RUN set -ex; \
@@ -49,10 +52,6 @@ RUN set -ex; \
 RUN set -ex ;\
     curl -SL 'https://raw.githubusercontent.com/Winetricks/winetricks/master/src/winetricks' -o /usr/local/bin/winetricks; \
     chmod +x /usr/local/bin/winetricks
-
-ENV MAVEN_VERSION=3.5.2 \
-    ANT_VERSION=1.10.1 \
-    GRADLE_VERSION=4.4.1
 
 RUN curl --silent --show-error --location --fail --retry 3 --output /tmp/apache-maven.tar.gz \
     https://www.apache.org/dist/maven/maven-3/$MAVEN_VERSION/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz \
@@ -75,7 +74,7 @@ RUN curl --silent --show-error --location --fail --retry 3 --output /tmp/gradle.
     && rm /tmp/gradle.zip \
     && ln -s /opt/gradle-* /opt/gradle \
     && /opt/gradle/bin/gradle -version
-    
+
 ENV PATH="/opt/sbt/bin:/opt/apache-maven/bin:/opt/apache-ant/bin:/opt/gradle/bin:$PATH"
 
 RUN set -ex ;\
@@ -87,25 +86,23 @@ RUN set -ex ;\
     cd .. ;\
     rm -rf ivy ;\
     cd $ANT_HOME ;\
-    ant -f fetch.xml -Ddest=system 
-#ATTACH /bin/bash
-RUN useradd -d /home/wix -m -s /bin/bash wix
-USER wix
-ENV HOME /home/wix
-ENV WINEPREFIX /home/wix/.wine
-ENV WINEARCH win32
+    ant -f fetch.xml -Ddest=system ;\
+    useradd -d /home/wix -m -s /bin/bash wix
 
-RUN set -ex ;\
-    wine wineboot ;\
-    xvfb-run winetricks --unattended dotnet40 corefonts 
-    
-    
+USER wix
+ENV HOME=/home/wix \
+    WINEPREFIX=/home/wix/.wine \
+    WINEARCH=win32
+
 WORKDIR /home/wix
 
 RUN set -ex ;\
+    wine wineboot ;\
+    xvfb-run winetricks --unattended dotnet40 corefonts ;\
     wget -O wix-binaries.zip https://github.com/wixtoolset/wix3/releases/download/wix3111rtm/wix311-binaries.zip ;\
     unzip wix-binaries.zip ;\
     rm -rf wix-binaries.zip doc sdk
+
 USER root
 
 RUN set -ex; \
@@ -120,5 +117,3 @@ USER wix
 
 
 ENTRYPOINT ["/bin/bash"]
-    
-
